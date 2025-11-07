@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>📦 Tracker Uang Belanja</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      background: linear-gradient(to bottom, #00aaff, #0099ff, #0077ff);
+      color: #fff;
+      min-height: 100vh;
+    }
+    h1 {
+      text-align: center;
+      padding: 20px;
+    }
+    .input-box {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    input {
+      padding: 10px;
+      border-radius: 8px;
+      border: none;
+      outline: none;
+    }
+    button {
+      padding: 10px 15px;
+      background: #0055cc;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #0044aa;
+    }
+    table {
+      width: 90%;
+      margin: auto;
+      border-collapse: collapse;
+      background: white;
+      color: black;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 10px;
+      text-align: center;
+    }
+    th {
+      background: #0077ff;
+      color: white;
+    }
+    tfoot {
+      font-weight: bold;
+      background: #eee;
+    }
+    .delete-btn {
+      background: red;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 10px;
+      cursor: pointer;
+      margin-left: 5px;
+    }
+    .reduce-btn {
+      background: orange;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 10px;
+      cursor: pointer;
+      margin-left: 5px;
+    }
+  </style>
+</head>
+<body>
+  <h1>📦 Tracker Uang Belanja</h1>
+
+  <div class="input-box">
+    <input type="text" id="barang" placeholder="Nama Barang">
+    <input type="number" id="jumlah" placeholder="Jumlah Uang (contoh: 130000)">
+    <button id="tambahBtn">Tambah</button>
+  </div>
+
+  <table id="tabelData">
+    <thead>
+      <tr>
+        <th>Barang</th>
+        <th>Total</th>
+        <th>Sisa</th>
+        <th>Aksi</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+    <tfoot>
+      <tr>
+        <td colspan="2">TOTAL SISA</td>
+        <td id="totalJumlah">Rp 0</td>
+        <td></td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getDatabase, ref, push, set, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+  // 🔹 Firebase config
+  const firebaseConfig = {
+    apiKey: "AIzaSyB8EJGRB6-BCa6uTT4jdBpkTDSe8vzx-N0",
+    authDomain: "uang-belanja.firebaseapp.com",
+    databaseURL: "https://uang-belanja-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "uang-belanja",
+    storageBucket: "uang-belanja.firebasestorage.app",
+    messagingSenderId: "216062191483",
+    appId: "1:216062191483:web:d0ef4e04865de27eb87fde",
+    measurementId: "G-X7YHBDFQK6"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+
+  // DOM
+  const barangInput = document.getElementById("barang");
+  const jumlahInput = document.getElementById("jumlah");
+  const tambahBtn = document.getElementById("tambahBtn");
+  const tableBody = document.querySelector("#tabelData tbody");
+  const totalJumlahEl = document.getElementById("totalJumlah");
+
+  // Format rupiah
+  function formatRupiah(angka) {
+    return "Rp " + angka.toLocaleString("id-ID");
+  }
+
+  // Tambah data
+  tambahBtn.addEventListener("click", () => {
+    const barang = barangInput.value.trim();
+    const jumlah = parseInt(jumlahInput.value);
+
+    if (!barang || isNaN(jumlah)) {
+      alert("Isi data dengan benar!");
+      return;
+    }
+
+    const belanjaRef = ref(db, "belanja");
+    const newItem = push(belanjaRef);
+    set(newItem, { barang, total: jumlah, sisa: jumlah });
+
+    barangInput.value = "";
+    jumlahInput.value = "";
+  });
+
+  // Update footer → jumlahkan semua sisa
+  function updateFooter(total) {
+    totalJumlahEl.textContent = formatRupiah(total);
+  }
+
+  // Baca data realtime
+  const belanjaRef = ref(db, "belanja");
+  onValue(belanjaRef, (snapshot) => {
+    tableBody.innerHTML = "";
+    let totalSisa = 0;
+
+    snapshot.forEach((child) => {
+      const data = child.val();
+      totalSisa += data.sisa;
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${data.barang}</td>
+        <td>${formatRupiah(data.total)}</td>
+        <td>${formatRupiah(data.sisa)}</td>
+        <td>
+          <button class="reduce-btn" onclick="kurangiData('${child.key}', ${data.sisa})">Kurangi</button>
+          <button class="delete-btn" onclick="hapusData('${child.key}')">Hapus</button>
+        </td>
+      `;
+      tableBody.appendChild(tr);
+    });
+
+    updateFooter(totalSisa);
+  });
+
+  // Hapus data
+  window.hapusData = (key) => {
+    remove(ref(db, "belanja/" + key));
+  };
+
+  // Kurangi data
+  window.kurangiData = (key, sisaSekarang) => {
+    let input = prompt("Masukkan nominal yang sudah dibayar/dibeli:", "0");
+    if (input === null) return;
+
+    let kurang = parseInt(input.replace(/\./g, "").replace(/,/g, ""));
+    if (isNaN(kurang) || kurang <= 0) {
+      alert("Nominal tidak valid!");
+      return;
+    }
+
+    let sisaBaru = sisaSekarang - kurang;
+    if (sisaBaru <= 0) {
+      remove(ref(db, "belanja/" + key));
+    } else {
+      update(ref(db, "belanja/" + key), { sisa: sisaBaru });
+    }
+  };
+  </script>
+</body>
+</html> 
